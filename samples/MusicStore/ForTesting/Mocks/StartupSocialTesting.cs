@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -50,7 +51,7 @@ namespace MusicStore
             if (_platform.UseInMemoryStore)
             {
                 services.AddDbContext<MusicStoreContext>(options =>
-                            options.UseInMemoryDatabase());
+                            options.UseInMemoryDatabase("Scratch"));
             }
             else
             {
@@ -59,12 +60,11 @@ namespace MusicStore
             }
 
             // Add Identity services to the services container
-            services.AddIdentity<ApplicationUser, IdentityRole>(options =>
-                    {
-                        options.Cookies.ApplicationCookie.AccessDeniedPath = new PathString("/Home/AccessDenied");
-                    })
+            services.AddIdentity<ApplicationUser, IdentityRole>()
                     .AddEntityFrameworkStores<MusicStoreContext>()
                     .AddDefaultTokenProviders();
+
+            services.ConfigureApplicationCookie(options => options.AccessDeniedPath = "/Home/AccessDenied");
 
             services.AddCors(options =>
             {
@@ -93,12 +93,73 @@ namespace MusicStore
             {
                 options.AddPolicy("ManageStore", new AuthorizationPolicyBuilder().RequireClaim("ManageStore", "Allowed").Build());
             });
+
+            services.AddFacebookAuthentication(options =>
+            {
+                options.AppId = "[AppId]";
+                options.AppSecret = "[AppSecret]";
+                options.Events = new OAuthEvents()
+                {
+                    OnCreatingTicket = TestFacebookEvents.OnCreatingTicket,
+                    OnTicketReceived = TestFacebookEvents.OnTicketReceived,
+                    OnRedirectToAuthorizationEndpoint = TestFacebookEvents.RedirectToAuthorizationEndpoint
+                };
+                options.BackchannelHttpHandler = new FacebookMockBackChannelHttpHandler();
+                options.StateDataFormat = new CustomStateDataFormat();
+                options.Scope.Add("email");
+                options.Scope.Add("read_friendlists");
+                options.Scope.Add("user_checkins");
+            });
+
+            services.AddGoogleAuthentication(options =>
+            {
+                options.ClientId = "[ClientId]";
+                options.ClientSecret = "[ClientSecret]";
+                options.AccessType = "offline";
+                options.Events = new OAuthEvents()
+                {
+                    OnCreatingTicket = TestGoogleEvents.OnCreatingTicket,
+                    OnTicketReceived = TestGoogleEvents.OnTicketReceived,
+                    OnRedirectToAuthorizationEndpoint = TestGoogleEvents.RedirectToAuthorizationEndpoint
+                };
+                options.StateDataFormat = new CustomStateDataFormat();
+                options.BackchannelHttpHandler = new GoogleMockBackChannelHttpHandler();
+            });
+
+            services.AddTwitterAuthentication(options =>
+            {
+                options.ConsumerKey = "[ConsumerKey]";
+                options.ConsumerSecret = "[ConsumerSecret]";
+                options.Events = new TwitterEvents()
+                {
+                    OnCreatingTicket = TestTwitterEvents.OnCreatingTicket,
+                    OnTicketReceived = TestTwitterEvents.OnTicketReceived,
+                    OnRedirectToAuthorizationEndpoint = TestTwitterEvents.RedirectToAuthorizationEndpoint
+                };
+                options.StateDataFormat = new CustomTwitterStateDataFormat();
+                options.BackchannelHttpHandler = new TwitterMockBackChannelHttpHandler();
+            });
+
+            services.AddMicrosoftAccountAuthentication(options =>
+            {
+                options.ClientId = "[ClientId]";
+                options.ClientSecret = "[ClientSecret]";
+                options.Events = new OAuthEvents()
+                {
+                    OnCreatingTicket = TestMicrosoftAccountEvents.OnCreatingTicket,
+                    OnTicketReceived = TestMicrosoftAccountEvents.OnTicketReceived,
+                    OnRedirectToAuthorizationEndpoint = TestMicrosoftAccountEvents.RedirectToAuthorizationEndpoint
+                };
+                options.BackchannelHttpHandler = new MicrosoftAccountMockBackChannelHandler();
+                options.StateDataFormat = new CustomStateDataFormat();
+                options.Scope.Add("wl.basic");
+                options.Scope.Add("wl.signin");
+            });
+
         }
 
-        public void Configure(IApplicationBuilder app, ILoggerFactory loggerFactory)
+        public void Configure(IApplicationBuilder app)
         {
-            loggerFactory.AddConsole(minLevel: LogLevel.Warning);
-
             app.UseStatusCodePagesWithRedirects("~/Home/StatusCodePage");
 
             // Error page middleware displays a nice formatted HTML page for any unhandled exceptions in the request pipeline.
@@ -114,67 +175,7 @@ namespace MusicStore
             app.UseStaticFiles();
 
             // Add cookie-based authentication to the request pipeline
-            app.UseIdentity();
-
-            app.UseFacebookAuthentication(new FacebookOptions
-            {
-                AppId = "[AppId]",
-                AppSecret = "[AppSecret]",
-                Events = new OAuthEvents()
-                {
-                    OnCreatingTicket = TestFacebookEvents.OnCreatingTicket,
-                    OnTicketReceived = TestFacebookEvents.OnTicketReceived,
-                    OnRedirectToAuthorizationEndpoint = TestFacebookEvents.RedirectToAuthorizationEndpoint
-                },
-                BackchannelHttpHandler = new FacebookMockBackChannelHttpHandler(),
-                StateDataFormat = new CustomStateDataFormat(),
-                Scope = { "email", "read_friendlists", "user_checkins" }
-            });
-
-            app.UseGoogleAuthentication(new GoogleOptions
-            {
-                ClientId = "[ClientId]",
-                ClientSecret = "[ClientSecret]",
-                AccessType = "offline",
-                Events = new OAuthEvents()
-                {
-                    OnCreatingTicket = TestGoogleEvents.OnCreatingTicket,
-                    OnTicketReceived = TestGoogleEvents.OnTicketReceived,
-                    OnRedirectToAuthorizationEndpoint = TestGoogleEvents.RedirectToAuthorizationEndpoint
-                },
-                StateDataFormat = new CustomStateDataFormat(),
-                BackchannelHttpHandler = new GoogleMockBackChannelHttpHandler()
-            });
-
-            app.UseTwitterAuthentication(new TwitterOptions
-            {
-                ConsumerKey = "[ConsumerKey]",
-                ConsumerSecret = "[ConsumerSecret]",
-                Events = new TwitterEvents()
-                {
-                    OnCreatingTicket = TestTwitterEvents.OnCreatingTicket,
-                    OnTicketReceived = TestTwitterEvents.OnTicketReceived,
-                    OnRedirectToAuthorizationEndpoint = TestTwitterEvents.RedirectToAuthorizationEndpoint
-                },
-                StateDataFormat = new CustomTwitterStateDataFormat(),
-                BackchannelHttpHandler = new TwitterMockBackChannelHttpHandler()
-            });
-
-            app.UseMicrosoftAccountAuthentication(new MicrosoftAccountOptions
-            {
-                DisplayName = "MicrosoftAccount - Requires project changes",
-                ClientId = "[ClientId]",
-                ClientSecret = "[ClientSecret]",
-                Events = new OAuthEvents()
-                {
-                    OnCreatingTicket = TestMicrosoftAccountEvents.OnCreatingTicket,
-                    OnTicketReceived = TestMicrosoftAccountEvents.OnTicketReceived,
-                    OnRedirectToAuthorizationEndpoint = TestMicrosoftAccountEvents.RedirectToAuthorizationEndpoint
-                },
-                BackchannelHttpHandler = new MicrosoftAccountMockBackChannelHandler(),
-                StateDataFormat = new CustomStateDataFormat(),
-                Scope = { "wl.basic", "wl.signin" }
-            });
+            app.UseAuthentication();
 
             // Add MVC to the request pipeline
             app.UseMvc(routes =>

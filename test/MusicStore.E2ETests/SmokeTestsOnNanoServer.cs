@@ -3,27 +3,26 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Threading.Tasks;
-using E2ETests.Common;
 using Microsoft.AspNetCore.Server.IntegrationTesting;
 using Microsoft.AspNetCore.Testing.xunit;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace E2ETests
 {
-    public class SmokeTestsOnNanoServerUsingStandaloneRuntime : IDisposable
+    // These tests publish(on the machine where these tests on run) the MusicStore app to a local folder first
+    // and then copy the published output to the target NanoServer and launch them.
+    public class SmokeTestsOnNanoServerUsingStandaloneRuntime
     {
         private readonly SmokeTestsOnNanoServer _smokeTestsOnNanoServer;
-        private readonly XunitLogger _logger;
         private readonly RemoteDeploymentConfig _remoteDeploymentConfig;
 
         public SmokeTestsOnNanoServerUsingStandaloneRuntime(ITestOutputHelper output)
         {
-            _logger = new XunitLogger(output, LogLevel.Information);
             _remoteDeploymentConfig = RemoteDeploymentConfigHelper.GetConfiguration();
-            _smokeTestsOnNanoServer = new SmokeTestsOnNanoServer(output, _remoteDeploymentConfig, _logger);
+            _smokeTestsOnNanoServer = new SmokeTestsOnNanoServer(output, _remoteDeploymentConfig);
         }
 
         [ConditionalTheory, Trait("E2ETests", "NanoServer")]
@@ -38,11 +37,6 @@ namespace E2ETests
             var applicationBaseUrl = $"http://{_remoteDeploymentConfig.ServerName}:{portToListen}/";
             await _smokeTestsOnNanoServer.RunTestsAsync(serverType, applicationBaseUrl, applicationType);
         }
-
-        public void Dispose()
-        {
-            _logger.Dispose();
-        }
     }
 
     // Tests here test portable app scenario, so we copy the dotnet runtime onto the
@@ -50,19 +44,17 @@ namespace E2ETests
     // to have the path to this copied dotnet runtime folder in the share.
     // The dotnet runtime is copied only once for all the tests in this class.
     public class SmokeTestsOnNanoServerUsingSharedRuntime
-        : IClassFixture<SmokeTestsOnNanoServerUsingSharedRuntime.DotnetRuntimeSetupTestFixture>, IDisposable
+        : IClassFixture<SmokeTestsOnNanoServerUsingSharedRuntime.DotnetRuntimeSetupTestFixture>
     {
         private readonly SmokeTestsOnNanoServer _smokeTestsOnNanoServer;
         private readonly RemoteDeploymentConfig _remoteDeploymentConfig;
-        private readonly XunitLogger _logger;
 
         public SmokeTestsOnNanoServerUsingSharedRuntime(
             DotnetRuntimeSetupTestFixture dotnetRuntimeSetupTestFixture, ITestOutputHelper output)
         {
-            _logger = new XunitLogger(output, LogLevel.Information);
             _remoteDeploymentConfig = RemoteDeploymentConfigHelper.GetConfiguration();
             _remoteDeploymentConfig.DotnetRuntimePathOnShare = dotnetRuntimeSetupTestFixture.DotnetRuntimePathOnShare;
-            _smokeTestsOnNanoServer = new SmokeTestsOnNanoServer(output, _remoteDeploymentConfig, _logger);
+            _smokeTestsOnNanoServer = new SmokeTestsOnNanoServer(output, _remoteDeploymentConfig);
         }
 
         [ConditionalTheory, Trait("E2Etests", "NanoServer")]
@@ -76,11 +68,6 @@ namespace E2ETests
         {
             var applicationBaseUrl = $"http://{_remoteDeploymentConfig.ServerName}:{portToListen}/";
             await _smokeTestsOnNanoServer.RunTestsAsync(serverType, applicationBaseUrl, applicationType);
-        }
-
-        public void Dispose()
-        {
-            _logger.Dispose();
         }
 
         // Copies dotnet runtime to the target server's file share.
@@ -230,14 +217,12 @@ namespace E2ETests
         }
     }
 
-    class SmokeTestsOnNanoServer
+    class SmokeTestsOnNanoServer : LoggedTest
     {
-        private readonly XunitLogger _logger;
         private readonly RemoteDeploymentConfig _remoteDeploymentConfig;
 
-        public SmokeTestsOnNanoServer(ITestOutputHelper output, RemoteDeploymentConfig config, XunitLogger logger)
+        public SmokeTestsOnNanoServer(ITestOutputHelper output, RemoteDeploymentConfig config) : base(output)
         {
-            _logger = logger;
             _remoteDeploymentConfig = config;
         }
 
@@ -246,8 +231,10 @@ namespace E2ETests
             string applicationBaseUrl,
             ApplicationType applicationType)
         {
-            using (_logger.BeginScope(nameof(SmokeTestsOnNanoServerUsingStandaloneRuntime)))
+            var testName = $"SmokeTestsOnNanoServer_{serverType}_{applicationType}";
+            using (StartLog(out var loggerFactory, testName))
             {
+                var logger = loggerFactory.CreateLogger(nameof(SmokeTestsOnNanoServerUsingStandaloneRuntime));
                 var deploymentParameters = new RemoteWindowsDeploymentParameters(
                     Helpers.GetApplicationPath(applicationType),
                     _remoteDeploymentConfig.DotnetRuntimePathOnShare,
@@ -259,18 +246,19 @@ namespace E2ETests
                     _remoteDeploymentConfig.AccountName,
                     _remoteDeploymentConfig.AccountPassword)
                 {
-                    TargetFramework = "netcoreapp1.1",
+                    TargetFramework = "netcoreapp2.0",
                     ApplicationBaseUriHint = applicationBaseUrl,
                     ApplicationType = applicationType
                 };
+
                 deploymentParameters.EnvironmentVariables.Add(
                     new KeyValuePair<string, string>("ASPNETCORE_ENVIRONMENT", "SocialTesting"));
 
-                using (var deployer = new RemoteWindowsDeployer(deploymentParameters, _logger))
+                using (var deployer = new RemoteWindowsDeployer(deploymentParameters, loggerFactory))
                 {
-                    var deploymentResult = deployer.Deploy();
+                    var deploymentResult = await deployer.DeployAsync();
 
-                    await SmokeTestHelper.RunTestsAsync(deploymentResult, _logger);
+                    await SmokeTestHelper.RunTestsAsync(deploymentResult, logger);
                 }
             }
         }

@@ -38,7 +38,6 @@ namespace E2ETests
             Assert.Equal<string>("code id_token", queryItems["response_type"]);
             Assert.Equal<string>("openid profile", queryItems["scope"]);
             Assert.Equal<string>("ValidStateData", queryItems["state"]);
-            Assert.NotNull(queryItems["nonce"]);
             Assert.NotNull(_httpClientHandler.CookieContainer.GetCookies(new Uri(_deploymentResult.ApplicationBaseUri)).GetCookieWithName(".AspNetCore.OpenIdConnect.Nonce.protectedString"));
 
             // This is just enable the auto-redirect.
@@ -46,7 +45,7 @@ namespace E2ETests
             _httpClient = new HttpClient(_httpClientHandler) { BaseAddress = new Uri(_deploymentResult.ApplicationBaseUri) };
             foreach (var header in Microsoft.Net.Http.Headers.SetCookieHeaderValue.ParseList(response.Headers.GetValues("Set-Cookie").ToList()))
             {
-                _httpClientHandler.CookieContainer.Add(new Uri(_deploymentResult.ApplicationBaseUri), new Cookie(header.Name, header.Value));
+                _httpClientHandler.CookieContainer.Add(new Uri(_deploymentResult.ApplicationBaseUri), new Cookie(header.Name.ToString(), header.Value.ToString()));
             }
 
             //Post a message to the OpenIdConnect middleware

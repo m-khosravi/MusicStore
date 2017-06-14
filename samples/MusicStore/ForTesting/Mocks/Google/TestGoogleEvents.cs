@@ -18,10 +18,10 @@ namespace MusicStore.Mocks.Google
             {
                 Helpers.ThrowIfConditionFailed(() => context.AccessToken == "ValidAccessToken", "Access token is not valid");
                 Helpers.ThrowIfConditionFailed(() => context.RefreshToken == "ValidRefreshToken", "Refresh token is not valid");
-                Helpers.ThrowIfConditionFailed(() => GoogleHelper.GetEmail(context.User) == "AspnetvnextTest@gmail.com", "Email is not valid");
-                Helpers.ThrowIfConditionFailed(() => GoogleHelper.GetId(context.User) == "106790274378320830963", "Id is not valid");
-                Helpers.ThrowIfConditionFailed(() => GoogleHelper.GetFamilyName(context.User) == "AspnetvnextTest", "FamilyName is not valid");
-                Helpers.ThrowIfConditionFailed(() => GoogleHelper.GetName(context.User) == "AspnetvnextTest AspnetvnextTest", "Name is not valid");
+                Helpers.ThrowIfConditionFailed(() => context.Identity.FindFirst(ClaimTypes.Email)?.Value == "AspnetvnextTest@gmail.com", "Email is not valid");
+                Helpers.ThrowIfConditionFailed(() => context.Identity.FindFirst(ClaimTypes.NameIdentifier)?.Value == "106790274378320830963", "Id is not valid");
+                Helpers.ThrowIfConditionFailed(() => context.Identity.FindFirst(ClaimTypes.Surname)?.Value == "AspnetvnextTest", "FamilyName is not valid");
+                Helpers.ThrowIfConditionFailed(() => context.Identity.FindFirst(ClaimTypes.Name)?.Value == "AspnetvnextTest AspnetvnextTest", "Name is not valid");
                 Helpers.ThrowIfConditionFailed(() => context.ExpiresIn.Value == TimeSpan.FromSeconds(1200), "ExpiresIn is not valid");
                 Helpers.ThrowIfConditionFailed(() => context.User != null, "User object is not valid");
                 context.Ticket.Principal.Identities.First().AddClaim(new Claim("ManageStore", "false"));
@@ -32,7 +32,7 @@ namespace MusicStore.Mocks.Google
 
         internal static Task OnTicketReceived(TicketReceivedContext context)
         {
-            if (context.Principal != null && context.Options.SignInScheme == new IdentityCookieOptions().ExternalCookieAuthenticationScheme)
+            if (context.Principal != null && context.Options.SignInScheme == IdentityConstants.ExternalScheme)
             {
                 //This way we will know all events were fired.
                 var identity = context.Principal.Identities.First();
